@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Inspection Development
+Comment=Connect to MoveIt2 Docker container
+Exec=terminator --new-tab -e "bash -c 'source ~/.local/share/applications/ros2-docker-template/.env && ~/.local/share/applications/ros2-docker-template/launch_container.sh; exec bash'"
+Terminal=false
+Categories=Development;
+

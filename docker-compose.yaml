@@ -1,0 +1,151 @@
+# ============================================================
+# Extension fields (YAML anchors for DRY config)
+# ============================================================
+
+x-common-env: &common-env
+  DISPLAY: ${DISPLAY:-:1}
+  QT_X11_NO_MITSHM: "1"
+  XAUTHORITY: /tmp/.docker.xauth
+  XDG_RUNTIME_DIR: /tmp/runtime-${USERNAME:-macs}
+  ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
+  CYCLONEDDS_URI: ${CYCLONEDDS_URI:-/config/cyclonedds.xml}
+
+x-nvidia-env: &nvidia-env
+  <<: *common-env
+  NVIDIA_VISIBLE_DEVICES: all
+  NVIDIA_DRIVER_CAPABILITIES: all
+  EGL_PLATFORM: device
+
+x-common-build-args: &common-build-args
+  ROS_DISTRO: humble
+  PLATFORM_TYPE: desktop
+  USERNAME: ${USERNAME:-macs}
+  UID: ${UID:-1000}
+  GID: ${UID:-1000}
+  VIDEO_GID: 44
+  DIALOUT_GID: 20
+
+x-common-volumes: &common-volumes
+  - /tmp/.X11-unix:/tmp/.X11-unix:rw
+  - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+  - ./docker/entrypoint.sh:/entrypoint.sh:ro
+  - ./src:/workspaces/shared_ws/src:rw
+  - ./data:/data:rw
+  - ./models:/models:rw
+  - ./config:/config:rw
+  - /dev:/dev
+  - /tmp/runtime-${USERNAME:-macs}:/tmp/runtime-${USERNAME:-macs}:rw
+
+x-jetson-volumes: &jetson-volumes
+  - /tmp/.X11-unix:/tmp/.X11-unix:rw
+  - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+  - ./docker/entrypoint.sh:/entrypoint.sh:ro
+  - ./src:/workspaces/shared_ws/src:rw
+  - ./data:/data:rw
+  - ./models:/models:rw
+  - ./config:/config:rw
+  - /dev:/dev
+  - /tmp/runtime-${USERNAME:-macs}:/tmp/runtime-${USERNAME:-macs}:rw
+  - /tmp/argus_socket:/tmp/argus_socket
+  - /proc/device-tree/compatible:/proc/device-tree/compatible:ro
+  - /proc/device-tree/chosen:/proc/device-tree/chosen:ro
+
+x-common-service: &common-service
+  container_name: ${CONTAINER_NAME:-ros2-docker-template}
+  image: ${CONTAINER_NAME:-ros2-docker-template}:humble
+  stdin_open: true
+  tty: true
+  network_mode: host
+  ipc: host
+  privileged: true
+  device_cgroup_rules:
+    - 'c *:* rmw'
+  working_dir: /workspaces/shared_ws
+  user: ${UID:-1000}:${UID:-1000}
+  command: ["/bin/bash"]
+
+# ============================================================
+# Services (one per platform profile)
+# ============================================================
+
+services:
+  # ---- Raspberry Pi 5 (arm64) ----
+  rpi:
+    <<: *common-service
+    profiles: ["rpi"]
+    platform: linux/arm64
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        <<: *common-build-args
+        BASE_IMAGE: ros:humble
+    environment:
+      <<: *common-env
+    volumes: *common-volumes
+    group_add:
+      - dialout
+
+  # ---- Linux x86_64, no GPU ----
+  linux:
+    <<: *common-service
+    profiles: ["linux"]
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        <<: *common-build-args
+        BASE_IMAGE: osrf/ros:humble-desktop-full
+    environment:
+      <<: *common-env
+    volumes: *common-volumes
+    group_add:
+      - dialout
+
+  # ---- Linux x86_64 with discrete NVIDIA GPU ----
+  linux-gpu:
+    <<: *common-service
+    profiles: ["linux-gpu"]
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        <<: *common-build-args
+        BASE_IMAGE: osrf/ros:humble-desktop-full
+    environment:
+      <<: *nvidia-env
+    volumes: *common-volumes
+    group_add:
+      - dialout
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, utility, compute, graphics]
+
+  # ---- NVIDIA Jetson (arm64, integrated GPU) ----
+  jetson:
+    <<: *common-service
+    profiles: ["jetson"]
+    platform: linux/arm64
+    runtime: nvidia
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      network: host
+      args:
+        <<: *common-build-args
+        BASE_IMAGE: dustynv/ros:humble-desktop-l4t-r36.4.0
+        PLATFORM_TYPE: jetson
+        ONNXRUNTIME_STAGE: dustynv/onnxruntime:1.20.2-r36.4.0
+    environment:
+      <<: *nvidia-env
+    volumes: *jetson-volumes
+    group_add:
+      - "44"   # video  — /dev/nvmap and /dev/dri/card* on Jetson
+      - "104"  # render — /dev/dri/renderD128 (EGL/GPU compute)
+      - dialout

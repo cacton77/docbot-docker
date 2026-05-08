@@ -1,0 +1,17 @@
+pyserial
+Jetson.GPIO
+
+# doc_rppg dependencies
+scipy
+ultralytics
+uniface[cpu]
+mediapipe
+
+# doc_vision — face identification
+facenet-pytorch
+
+# doc_vision — InsightFace (RetinaFace + ArcFace)
+# onnxruntime provides the CPU baseline; the Jetson Dockerfile block installs
+# onnxruntime-gpu afterwards to enable CUDAExecutionProvider on Jetson.
+insightface
+onnxruntime

@@ -1,0 +1,26 @@
+# ── Repos managed by vcs import (src.repos) ──────────────────────────────────
+src/doc_cameras/
+src/doc_pose/
+src/doc_rppg/
+src/doc_ui/
+
+# ── Model files (managed by models.repos + vcs) ───────────────────────────────
+models/insightface/
+
+# ── Arduino compiled binary ───────────────────────────────────────────────────
+arduino/bin/
+arduino/tmp/
+
+# ── Build artifacts ───────────────────────────────────────────────────────────
+build.log
+build/
+install/
+log/
+
+# ── Local tooling config ──────────────────────────────────────────────────────
+.claude/settings.local.json
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo

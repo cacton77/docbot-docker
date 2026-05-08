@@ -1,0 +1,10 @@
+face_detection_node:
+  ros__parameters:
+    camera_topic:        /left/image_raw   # topic to subscribe to
+    crop_size:           128               # each face crop is resized to crop_size × crop_size (pixels)
+    conf_threshold:      0.4               # minimum YOLO confidence to report a detection
+    max_faces:           4                 # maximum number of faces to report per frame
+    imgsz:               320               # YOLO inference resolution; 320 is ~4× faster than 640 with minimal
+                                           # accuracy loss for face detection at typical distances
+    similarity_threshold: 0.75             # cosine similarity threshold for FaceNet identity matching;
+                                           # raise (→1.0) to require closer match before reusing an ID

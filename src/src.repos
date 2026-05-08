@@ -1,0 +1,17 @@
+repositories:
+    doc_ui:
+        type: git
+        url: https://github.com/DevanshB99/doc_ui.git
+        version: devel
+    doc_cameras:
+        type: git
+        url: https://github.com/DevanshB99/doc_cameras.git
+        version: main
+    doc_pose: 
+        type: git
+        url: https://github.com/DevanshB99/doc_pose.git
+        version: main
+    doc_rppg:
+        type: git 
+        url: https://github.com/DevanshB99/doc_rppg.git
+        version: main

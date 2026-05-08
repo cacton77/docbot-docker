@@ -1,0 +1,9 @@
+servo_node:
+  ros__parameters:
+    gpio_pin:       33       # physical 40-pin header pin (board numbering) — pin 33 = PWM2
+    pwm_frequency:  50.0     # Hz — do not change for standard analogue servos
+    min_angle:       0.0     # degrees: lower software travel limit
+    max_angle:     180.0     # degrees: upper software travel limit
+    min_pulse_us:  500.0     # µs pulse width at min_angle  (calibrate per servo)
+    max_pulse_us: 2400.0     # µs pulse width at max_angle  (calibrate per servo)
+    command_topic: /control/servo_angle

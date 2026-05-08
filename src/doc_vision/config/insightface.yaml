@@ -1,0 +1,11 @@
+insightface_node:
+  ros__parameters:
+    camera_topic:         /left/image_raw   # image topic to subscribe to
+    crop_size:            128               # aligned face crop output size (pixels²)
+    conf_threshold:       0.4               # minimum RetinaFace detection score
+    max_faces:            4                 # maximum faces to process per frame
+    det_size:             320               # detector input resolution (320 or 640)
+    model_pack:           buffalo_sc        # buffalo_sc (edge) or buffalo_l (accurate)
+    similarity_threshold: 0.75             # ArcFace cosine similarity threshold for
+                                           # re-identifying a known user; raise toward
+                                           # 1.0 for stricter matching
