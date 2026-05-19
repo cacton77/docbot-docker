@@ -44,6 +44,19 @@ RUN printf '[global]\nindex-url = https://pypi.org/simple/\n' > /etc/pip.conf
 RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | \
     gpg --batch --yes --dearmor -o /usr/share/keyrings/ros-archive-keyring.gpg
 
+# Remove stale apt sources baked into the base image and purge cached lists so
+# apt-get update fetches fresh metadata (avoids "changed Origin/Label" hard errors).
+RUN sed -i '/isaac\.download\.nvidia\.com\/isaac-ros\/ubuntu/d' /etc/apt/sources.list 2>/dev/null || true && \
+    grep -rl 'isaac\.download\.nvidia\.com/isaac-ros/ubuntu' \
+        /etc/apt/sources.list.d/ 2>/dev/null | xargs rm -f || true && \
+    grep -rl 'apt\.kitware\.com' \
+        /etc/apt/sources.list.d/ 2>/dev/null | xargs rm -f || true && \
+    grep -rl 'dl\.yarnpkg\.com' \
+        /etc/apt/sources.list.d/ 2>/dev/null | xargs rm -f || true && \
+    find /usr/share/keyrings/ \( -name "kitware*.gpg" -o -name "kitware*.asc" \
+        -o -name "yarn*.gpg" -o -name "yarn*.asc" \) -delete || true && \
+    rm -rf /var/lib/apt/lists/*
+
 # Install base dependencies
 COPY docker/packages.txt /tmp/packages.txt
 RUN apt-get update && \
@@ -86,38 +99,30 @@ RUN /bin/bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && \
     source install/setup.bash && \
     ros2 run micro_ros_setup build_agent.sh"
 
-# Install overlay dependencies
-# On Jetson, --force-overwrite is needed: the dustynv base image ships NVIDIA's
-# custom opencv-dev that owns the same headers as Ubuntu's libopencv-*-dev
-# (pulled in transitively by ROS packages). Only headers are overwritten;
-# NVIDIA's CUDA-accelerated shared libraries are unaffected.
+# Add NVIDIA Isaac ROS apt repository (Jetson only — packages unavailable on desktop)
+RUN if [ "$PLATFORM_TYPE" = "jetson" ]; then \
+        curl -sSL https://isaac.download.nvidia.com/isaac-ros/repos.key | \
+            gpg --batch --yes --dearmor \
+                -o /usr/share/keyrings/isaac-ros-archive-keyring.gpg && \
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/isaac-ros-archive-keyring.gpg] https://isaac.download.nvidia.com/isaac-ros/release-3 $(lsb_release -cs) release" \
+            > /etc/apt/sources.list.d/isaac-ros.list; \
+    fi
+
+# Install common overlay dependencies (all platforms)
 COPY docker/overlay_packages.txt /tmp/overlay_packages.txt
 RUN apt-get update && \
     grep -v '^#' /tmp/overlay_packages.txt | grep -v '^$' | \
-    xargs apt-get install -y \
-    $([ "$PLATFORM_TYPE" = "jetson" ] && echo "-o Dpkg::Options::=--force-overwrite") && \
+    xargs apt-get install -y && \
     rm -rf /var/lib/apt/lists/* /tmp/overlay_packages.txt
 
-# On Jetson, build vision_opencv (cv_bridge) and gscam2 from source in an isolated workspace.
-# The binary ros-humble-cv-bridge pulls in system libopencv-dev headers that conflict with
-# NVIDIA's pre-installed CUDA OpenCV. Building after micro-ROS avoids interference with
-# micro_ros_setup's internal rosdep calls.
+# Install Jetson-specific Isaac ROS packages (uses the repo added above)
+COPY docker/overlay_packages_jetson.txt /tmp/overlay_packages_jetson.txt
 RUN if [ "$PLATFORM_TYPE" = "jetson" ]; then \
-        mkdir -p /tmp/gscam_ws/src && \
-        git clone -b humble https://github.com/ros-perception/vision_opencv.git /tmp/gscam_ws/src/vision_opencv && \
-        git clone -b main https://github.com/clydemcqueen/gscam2.git /tmp/gscam_ws/src/gscam2 && \
-        /bin/bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && \
-            apt-get update && \
-            rosdep install --from-paths /tmp/gscam_ws/src --ignore-src -y \
-                --skip-keys 'libopencv-dev libopencv-imgproc-dev libopencv-core-dev' && \
-            rm -rf /var/lib/apt/lists/* && \
-            cd /tmp/gscam_ws && \
-            colcon build --merge-install --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF && \
-            cp -r install/lib/* /opt/ros/${ROS_DISTRO}/lib/ && \
-            cp -r install/share/* /opt/ros/${ROS_DISTRO}/share/ && \
-            cp -r install/include/* /opt/ros/${ROS_DISTRO}/include/" && \
-        rm -rf /tmp/gscam_ws; \
-    fi
+        apt-get update && \
+        grep -v '^#' /tmp/overlay_packages_jetson.txt | grep -v '^$' | \
+        xargs apt-get install -y && \
+        rm -rf /var/lib/apt/lists/*; \
+    fi && rm -f /tmp/overlay_packages_jetson.txt
 
 # Install PyTorch for non-Jetson platforms before requirements.txt so that
 # ultralytics (in requirements.txt) sees torch already present and won't upgrade it.
@@ -132,14 +137,13 @@ COPY docker/requirements.txt /tmp/requirements.txt
 RUN apt-get remove -y python3-sympy 2>/dev/null || true
 RUN python3 -m pip install --index-url https://pypi.org/simple/ -r /tmp/requirements.txt && rm /tmp/requirements.txt
 
-# For Jetson: install the NVIDIA-optimized PyTorch wheel AFTER requirements.txt so it
-# overrides the generic cu1xx wheel that ultralytics pulls in from standard PyPI.
-# --no-deps avoids pip re-resolving transitive deps; the Jetson wheel is API-compatible
-# with torch 2.5.x so everything installed by requirements.txt continues to work.
-# torchvision from PyPI is installed separately as it is not on the NVIDIA redist server.
-# nvidia-cusparselt-cu12 provides libcusparseLt.so.0 which the Jetson torch wheel links
-# against but which is not included in the dustynv base image's CUDA toolkit. It is
-# registered with ldconfig so the dynamic linker can find it at runtime.
+# For Jetson: install the NVIDIA-optimized PyTorch wheel after requirements.txt so it
+# takes precedence over any CPU torch pulled in by ultralytics/insightface.
+# torchvision is installed from the PyPI manylinux2014_aarch64 pre-built wheel (cp310)
+# instead of being compiled from source — source builds OOM-crash the Jetson.
+# The PyPI wheel is a CPU-only build (same as FORCE_CUDA=0 from source) and is
+# ABI-compatible with the NVIDIA 2.5.0 torch since both use the same libtorch_cpu ABI.
+# nvidia-cusparselt-cu12 provides libcusparseLt.so.0 which the torch wheel links against.
 RUN if [ "$PLATFORM_TYPE" = "jetson" ]; then \
         TORCH_WHL="torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl" && \
         curl -L -o "/tmp/${TORCH_WHL}" \
@@ -149,13 +153,12 @@ RUN if [ "$PLATFORM_TYPE" = "jetson" ]; then \
         pip3 install --no-cache-dir --index-url https://pypi.org/simple/ \
             nvidia-cusparselt-cu12 && \
         CUSPARSELT_LIB=$(find /usr/local/lib/python3.10 -name "libcusparseLt.so*" -type f 2>/dev/null | head -1 | xargs dirname) && \
-        echo "$CUSPARSELT_LIB" > /etc/ld.so.conf.d/nvidia-cusparselt.conf && \
-        ldconfig && \
-        git clone --depth 1 --branch v0.20.1 \
-            https://github.com/pytorch/vision.git /tmp/torchvision && \
-        cd /tmp/torchvision && \
-        FORCE_CUDA=0 pip3 install --no-build-isolation --no-deps . && \
-        cd / && rm -rf /tmp/torchvision; \
+        if [ -n "$CUSPARSELT_LIB" ]; then \
+            echo "$CUSPARSELT_LIB" > /etc/ld.so.conf.d/nvidia-cusparselt.conf && ldconfig; \
+        fi && \
+        pip3 install --no-cache-dir --no-deps \
+            --index-url https://pypi.org/simple/ \
+            "torchvision==0.20.1"; \
     fi
 
 # Install onnxruntime-gpu wheel if one was extracted from ONNXRUNTIME_STAGE.
@@ -185,6 +188,23 @@ RUN mkdir -p /workspaces/shared_ws/src
 RUN mkdir -p /data
 RUN mkdir -p /models
 
+# Build gscam2 from source (Jetson only — ros-humble-gscam2 binary not available for arm64/Jammy)
+RUN mkdir -p /workspaces/gscam2_ws/src && \
+    if [ "$PLATFORM_TYPE" = "jetson" ]; then \
+        apt-get update && \
+        apt-get install -y --no-install-recommends \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev && \
+        rm -rf /var/lib/apt/lists/* && \
+        git clone --depth 1 https://github.com/clydemcqueen/gscam2.git \
+            /workspaces/gscam2_ws/src/gscam2 && \
+        /bin/bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && \
+            cd /workspaces/gscam2_ws && \
+            colcon build \
+                --executor sequential \
+                --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF"; \
+    fi
+
 # Create new user and add to video group
 RUN apt-get update && apt-get install -y sudo && rm -rf /var/lib/apt/lists/*
 
@@ -198,18 +218,27 @@ ARG DIALOUT_GID=20
 RUN getent group video || groupadd --gid ${VIDEO_GID} video
 RUN getent group dialout || groupadd --gid ${DIALOUT_GID} dialout
 
-RUN groupadd --gid ${GID} ${USERNAME} \
-    && useradd --uid ${UID} --gid ${GID} --create-home ${USERNAME} \
-    && usermod -a -G video ${USERNAME} \
-    && usermod -a -G dialout ${USERNAME} \
-    # Give sudo permissions without password 
-    && echo ${USERNAME} ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/${USERNAME} \
-    && chmod 0440 /etc/sudoers.d/${USERNAME} \
-    && mkdir -p /home/${USERNAME} \
-    && chown -R ${UID}:${GID} /home/${USERNAME}
+RUN if getent group ${GID} > /dev/null 2>&1; then \
+        groupmod -n ${USERNAME} "$(getent group ${GID} | cut -d: -f1)"; \
+    else \
+        groupadd --gid ${GID} ${USERNAME}; \
+    fi && \
+    if getent passwd ${UID} > /dev/null 2>&1; then \
+        OLD="$(getent passwd ${UID} | cut -d: -f1)" && \
+        usermod -l ${USERNAME} -d /home/${USERNAME} -m "$OLD"; \
+    else \
+        useradd --uid ${UID} --gid ${GID} --create-home ${USERNAME}; \
+    fi && \
+    usermod -a -G video ${USERNAME} && \
+    usermod -a -G dialout ${USERNAME} && \
+    echo "${USERNAME} ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} && \
+    chmod 0440 /etc/sudoers.d/${USERNAME} && \
+    mkdir -p /home/${USERNAME} && \
+    chown -R ${UID}:${GID} /home/${USERNAME}
 
 # Set the ownership of the shared workspace to the new user
 RUN chown -R ${UID}:${UID} /workspaces/shared_ws/
+RUN chown -R ${UID}:${UID} /workspaces/gscam2_ws/
 RUN chown -R ${UID}:${UID} /data/
 RUN chown -R ${UID}:${UID} /models/
 

@@ -1,10 +1,15 @@
+# ── Standard ROS2 image/stereo pipeline ──────────────────────────────────────
+ros-humble-image-proc
+ros-humble-stereo-image-proc
+
+# ── Camera drivers ────────────────────────────────────────────────────────────
 ros-humble-librealsense2*
 ros-humble-realsense2-*
 ros-humble-camera-ros
+
+# ── Other ROS2 packages ───────────────────────────────────────────────────────
 ros-humble-joy
 ros-humble-image-transport-plugins
-ros-humble-image-proc
-ros-humble-stereo-image-proc
 ros-humble-rqt*
 ros-humble-ros2-control
 ros-humble-ros2-controllers

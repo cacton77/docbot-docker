@@ -244,7 +244,128 @@ If a conflicting version is found, add it to the `pip3 uninstall` list in the Do
 
 ### Open Questions
 
-- What is the exact Isaac ROS 4.4.0 image hash for L4T r36.4.0? (check release notes)
 - Does the Isaac ROS base image pre-install any onnxruntime version that would conflict?
 - Does `micro_ros_setup` build cleanly against the Isaac ROS base image's ROS2 Humble install?
 - Does `argusd` (the Argus daemon) need to be started separately, or is it managed by the container runtime on r36.4.0?
+
+---
+
+## Isaac ROS Migration — Implementation Progress (2026-05-08)
+
+### Base Image Identified
+
+Research into `isaac_ros_common` release-3.2 confirmed the correct base image for our hardware:
+
+```
+nvcr.io/nvidia/isaac/ros:aarch64-ros2_humble_b7e1ed6c02a6fa3c1c7392479291c035
+```
+
+This image is built on `nvcr.io/nvidia/12.6.11-devel:12.6.11-devel-aarch64-ubuntu22.04` (CUDA 12.6 / Ubuntu 22.04), **not** an L4T base. For JetPack 6+, NVIDIA shifted to standard Ubuntu 22.04 containers — L4T dependencies (Argus daemon, GPU drivers) are provided by the host OS via device mounts, which our `docker-compose.yaml` already handles (`/tmp/argus_socket`, `/dev` bind mounts).
+
+The image bundles: CUDA 12.6, TensorRT 10.3, PyTorch `2.5.0a0+872d972e41.nv24.08` (JP6.1 Jetson wheel), VPI 3.2.4, CV-CUDA 0.5.0, and ROS2 Humble. It targets r36.4 Jetson packages; our board runs r36.5.0, which is forward-compatible.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `docker-compose.yaml` | `BASE_IMAGE` → confirmed Isaac ROS hash |
+| `docker/overlay_packages.txt` | Added `ros-humble-isaac-ros-{argus-camera,image-proc,stereo-image-proc,nitros}`; kept standard packages as non-Jetson fallback |
+| `docker/Dockerfile` | Removed gscam2 + vision_opencv Jetson source build; removed `--force-overwrite` (no OpenCV conflict on new base); added skip-if-present guard for PyTorch wheel download (already in base image) |
+| `src/doc_cameras/launch/stereo_camera.launch.py` | Replaced `_jetson_node()` (gscam2 `Node`) with `_jetson_container()` (`ArgusStereoNode` in `ComposableNodeContainer`); non-Jetson paths unchanged |
+| `src/doc_cameras/launch/stereo_proc.launch.py` | Jetson: `RectifyNode` (`nvidia::isaac_ros::image_proc::RectifyNode`) in GPU container; non-Jetson: CPU `rectify_node` fallback; disparity/point_cloud remapped from `image_rect_color` → `image_rect` |
+
+### Architecture After Migration
+
+```
+Sensor (IMX219)
+  └─ ArgusStereoNode [component_container_mt] (NVMM, no CPU copy)
+       ├─ /left/image_raw  ──► RectifyNode [image_proc_container] ──► /left/image_rect
+       └─ /right/image_raw ──► RectifyNode                        ──► /right/image_rect
+                                    │
+                          stereo_image_proc (CPU)
+                          ├─ /stereo/disparity
+                          └─ /stereo/points2
+
+/left/image_raw ──────────────────────────────────► insightface_node (CUDA via ORT)
+/left/image_raw ──────────────────────────────────► rppg_node
+```
+
+### Critical Findings From Base Image Inspection
+
+Running the pulled Isaac ROS base image revealed several assumptions in the plan were wrong:
+
+- **OS**: Ubuntu 20.04 (focal), not Ubuntu 22.04 as initially assumed.
+- **Isaac ROS apt repo**: NOT pre-configured. `ros-humble-isaac-ros-*` packages are unavailable until the repo is added.
+- **PyTorch**: NOT pre-installed. The base image does not include the NVIDIA Jetson PyTorch wheel.
+- **ORT**: NOT pre-installed. No `onnxruntime` of any kind in the base image.
+
+### Dockerfile Fixes Applied (2026-05-08)
+
+Three bugs introduced during the initial migration were fixed:
+
+**1. Isaac ROS apt repo missing**
+
+Added a conditional `RUN` block before the overlay package install that fetches and registers the NVIDIA Isaac ROS apt repo key and sources list entry. Only runs when `PLATFORM_TYPE=jetson`. Uses `$(lsb_release -cs)` to resolve the distro codename at build time so it works regardless of whether the base image turns out to be focal or jammy.
+
+```dockerfile
+RUN if [ "$PLATFORM_TYPE" = "jetson" ]; then \
+        curl -sSL https://isaac.download.nvidia.com/isaac-ros/repos.key | \
+            gpg --batch --yes --dearmor \
+                -o /usr/share/keyrings/isaac-ros-archive-keyring.gpg && \
+        echo "deb [arch=...] https://isaac.download.nvidia.com/isaac-ros/release-3 $(lsb_release -cs) release" \
+            > /etc/apt/sources.list.d/isaac-ros.list; \
+    fi
+```
+
+**2. Isaac ROS packages in shared overlay_packages.txt broke desktop builds**
+
+Desktop apt sources don't carry `ros-humble-isaac-ros-*` packages, so including them in `overlay_packages.txt` caused desktop builds to fail at the `apt-get install` step.
+
+Fix: split into two files:
+- `docker/overlay_packages.txt` — common packages (all platforms)
+- `docker/overlay_packages_jetson.txt` — Isaac ROS packages (Jetson only, installed after repo setup)
+
+**3. Incorrect PyTorch skip-guard**
+
+The Dockerfile had a guard that skipped downloading the PyTorch wheel if `import torch` with the expected version hash succeeded. This was based on the (wrong) assumption that the Isaac ROS base image pre-installs PyTorch. Since it does not, the guard would always fall through to the download branch anyway — but the guard logic was confusing and the comment was misleading. Removed the guard entirely; the PyTorch wheel is now always downloaded and installed unconditionally on Jetson builds.
+
+---
+
+## Stereo Rectification Performance Benchmarks (2026-05-13)
+
+### Setup
+- Camera: two IMX219 CSI cameras on Jetson Orin NX via gscam2 (`nvarguscamerasrc`)
+- Raw image rate: **~30 fps** at 1280×720 (sensor_mode=4; despite framerate=60/1 in pipeline, sensor or DMA caps at 30 fps on this hardware)
+- gscam2 publishes standard `sensor_msgs/Image` (rgb8, CPU memory) — no NITROS output
+
+### Results
+
+| Approach | `/left/image_rect` fps | Notes |
+|---|---|---|
+| Isaac ROS `RectifyNode` in `component_container_mt` (GPU) | **~14–15 fps** | Best result. CUDA rectification; CPU→GPU→CPU DMA per frame |
+| CPU `image_proc::RectifyNode` as standalone processes | ~7–10 fps | Worse. Full DDS serialization of 2.76 MB frames between separate processes |
+| CPU `image_proc::RectifyNode` as composable nodes w/ IPC | ~6 fps | Worst. IPC comms within container + approximate_sync may cause frame drops |
+
+### Why GPU wins despite DMA overhead
+The Isaac ROS `RectifyNode` path is best because:
+- It runs inside a `component_container_mt` — the CUDA kernel executes in a dedicated thread, parallelizing left and right camera rectification
+- DMA cost (CPU→GPU) is amortized across both cameras sharing one container
+- CPU paths require full DDS round-trips between separate processes for 2.76 MB/frame images, which saturates the DDS transport layer
+
+### Root cause of ~50% throughput (30 fps raw → 15 fps rect)
+Without a NITROS-native camera source, every frame crosses the CPU↔GPU boundary twice (in and out of RectifyNode). The limit is DMA bandwidth + CUDA stream serialization for two concurrent cameras. This is a known limitation when gscam2 is used instead of `ArgusStereoNode`.
+
+### Path to full 30+ fps rectified
+End-to-end NITROS: use `isaac_ros_argus_camera/ArgusStereoNode` (keeps frames in NVMM from sensor to rectification, zero CPU copies). See "Isaac ROS Migration Plan" section above. The stereo pipeline already has the correct architecture; only the camera source needs to change.
+
+### Current state
+`stereo_proc.launch.py` uses Isaac ROS GPU `RectifyNode` on Jetson (reverted to this after CPU experiments performed worse). Disparity and point cloud remain CPU-based (`stereo_image_proc` standalone nodes).
+
+---
+
+### Remaining Before Build
+
+1. Run `./install.sh --jetson` to rebuild with all fixes applied.
+2. Watch for apt errors during the Isaac ROS package install — if the repo URL returns 404 for the `$(lsb_release -cs)` value (e.g. "focal" packages not present), the distro name in the sources entry may need to be hardcoded to "jammy".
+3. Confirm `ros2 topic hz /left/image_raw` shows ~60fps.
+4. Confirm `insightface_node` logs show `providers: ['CUDAExecutionProvider', ...]`.

@@ -139,7 +139,7 @@ services:
       network: host
       args:
         <<: *common-build-args
-        BASE_IMAGE: dustynv/ros:humble-desktop-l4t-r36.4.0
+        BASE_IMAGE: nvcr.io/nvidia/isaac/ros:aarch64-ros2_humble_d33953d7abe50ce895998252e51aca25
         PLATFORM_TYPE: jetson
         ONNXRUNTIME_STAGE: dustynv/onnxruntime:1.20.2-r36.4.0
     environment:

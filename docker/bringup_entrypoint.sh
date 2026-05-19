@@ -25,4 +25,4 @@ fi
 # Set Middleware to CycloneDDS
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
-exec "ros2 launch viewpoint_generation bringup.launch.py $@"
+exec "$@"

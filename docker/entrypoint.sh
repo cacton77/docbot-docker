@@ -10,6 +10,12 @@ then
     source /workspaces/base_ws/install/setup.bash
 fi
 
+# Source gscam2 workspace (Jetson only, built into image)
+if [ -f /workspaces/gscam2_ws/install/setup.bash ]
+then
+    source /workspaces/gscam2_ws/install/setup.bash
+fi
+
 # Source the overlay workspace, if built. If not, build it.
 if [ -f /workspaces/shared_ws/install/setup.bash ]
 then

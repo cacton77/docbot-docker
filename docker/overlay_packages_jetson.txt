@@ -1,0 +1,6 @@
+# ── Isaac ROS image pipeline (Jetson only) ────────────────────────────────────
+# Installed after the Isaac ROS apt repo is added in the Dockerfile.
+# These replace image_proc and stereo_image_proc on the Jetson/NITROS path.
+ros-humble-isaac-ros-image-proc
+ros-humble-isaac-ros-stereo-image-proc
+ros-humble-isaac-ros-nitros
