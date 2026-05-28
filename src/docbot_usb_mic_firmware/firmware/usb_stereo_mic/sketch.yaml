@@ -1,0 +1,13 @@
+# Build spec for the docbot USB stereo microphone firmware.
+# install.sh parses this file directly (NOT via arduino-cli sketch profiles)
+# and installs the platform + libraries to the user library scope before
+# compiling. We intentionally do not set `default_profile` — that activates
+# arduino-cli's sketch-profile mode, which silently ignores --libraries.
+
+profiles:
+  esp32s3_devkitc:
+    fqbn: esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=default,MSCOnBoot=default,DFUOnBoot=default,UploadMode=default,CPUFreq=240,FlashMode=qio,FlashSize=8M,PartitionScheme=default_8MB,DebugLevel=none,PSRAM=opi,LoopCore=1,EventsCore=0,EraseFlash=none
+    platforms:
+      - platform: esp32:esp32 (3.0.7)
+        platform_index_url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+    libraries: []

@@ -1,0 +1,13 @@
+# Flashing metadata consumed by ../../install.sh.
+#
+# Flashing notes for ESP32-S3-DEVKITC-1 (N8R8):
+#   The board has TWO USB ports. The "UART" port (via CP2102 -> /dev/ttyUSB*)
+#   is always usable for flashing. The "USB" port is the native OTG that the
+#   firmware uses to enumerate as a USB Audio Class microphone — once flashed,
+#   it WILL NOT appear as a serial port. Always flash through the UART port.
+#
+#   If the board doesn't auto-enter download mode, hold BOOT, tap RESET,
+#   release BOOT, then re-run install.sh.
+
+flash_method: serial
+serial_glob: /dev/ttyUSB*
