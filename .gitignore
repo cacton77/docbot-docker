@@ -18,7 +18,7 @@ install/
 log/
 
 # ── Local tooling config ──────────────────────────────────────────────────────
-.claude/settings.local.json
+# .claude/settings.local.json
 
 # ── VS Code per-machine caches ────────────────────────────────────────────────
 # IntelliSense database; routinely grows to hundreds of MB and blocks pushes.

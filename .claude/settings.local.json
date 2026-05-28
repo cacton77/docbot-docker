@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "Bash(gh api *)",
+      "Bash(curl -s https://raw.githubusercontent.com/cacton77/Inspection_EOAT_ROS2_Driver/main/firmware/macro-ps/sketch.yaml)",
+      "Bash(curl -s https://raw.githubusercontent.com/cacton77/Inspection_EOAT_ROS2_Driver/main/firmware/macro-ps/firmware.yaml)",
+      "Bash(curl *)"
+    ]
+  }
+}
