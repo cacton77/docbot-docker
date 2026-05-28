@@ -1,0 +1,16 @@
+# Append a structured entry to the health log (JSONL on disk).
+
+string conversation_id
+string user_text
+string assistant_text
+string summary
+string[] reported_symptoms
+string[] observations
+string escalation_level
+string audio_clip_path              # "" if not retained
+string llm_model                    # for audit (e.g. "qwen2.5:14b-instruct-q6_K")
+string llm_audit_path               # raw response file, "" if not retained
+---
+bool success
+string log_entry_id                 # ULID/UUID, used as foreign key
+string file_path                    # actual file written to

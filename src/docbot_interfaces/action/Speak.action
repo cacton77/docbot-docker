@@ -1,0 +1,16 @@
+# Synthesize and play back a response. The TTS node is expected to gate
+# wake detection internally for the duration of playback.
+
+# Goal
+string text
+string voice                                   # voice id, "" = config default
+float32 rate                                   # 1.0 = normal
+
+---
+# Result
+bool success
+builtin_interfaces/Duration duration
+
+---
+# Feedback
+float32 progress                               # 0..1

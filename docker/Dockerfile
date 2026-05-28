@@ -115,6 +115,13 @@ RUN apt-get update && \
     xargs apt-get install -y && \
     rm -rf /var/lib/apt/lists/* /tmp/overlay_packages.txt
 
+# Install ALSA config that routes default PCM/CTL through PulseAudio. The
+# pulse client libs and ALSA→pulse plugin come from overlay_packages.txt
+# above; this config tells ALSA to use them. Combined with the pulse socket
+# mount in docker-compose, "default" inside the container resolves to the
+# host's selected input/output instead of ALSA card 0 (typically HDMI).
+COPY docker/asound.conf /etc/asound.conf
+
 # Install Jetson-specific Isaac ROS packages (uses the repo added above)
 COPY docker/overlay_packages_jetson.txt /tmp/overlay_packages_jetson.txt
 RUN if [ "$PLATFORM_TYPE" = "jetson" ]; then \
@@ -187,6 +194,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN mkdir -p /workspaces/shared_ws/src
 RUN mkdir -p /data
 RUN mkdir -p /models
+
+# Download Piper TTS voice (en_US-lessac-medium, ~60MB). Baked into the image
+# under /opt/piper-voices/ rather than /models/ because /models is bind-mounted
+# from the host and would shadow image-time downloads at runtime.
+RUN mkdir -p /opt/piper-voices && \
+    PIPER_VOICE_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium" && \
+    curl -fsSL "${PIPER_VOICE_URL}/en_US-lessac-medium.onnx" \
+        -o /opt/piper-voices/en_US-lessac-medium.onnx && \
+    curl -fsSL "${PIPER_VOICE_URL}/en_US-lessac-medium.onnx.json" \
+        -o /opt/piper-voices/en_US-lessac-medium.onnx.json
+
+# Download faster-whisper small.en (~480MB) into the image. CPU+int8 is the
+# safest combination during build (no CUDA in the build sandbox); runtime
+# can pick a different device/compute_type from the same on-disk cache.
+RUN mkdir -p /opt/whisper-models && \
+    python3 -c "from faster_whisper import WhisperModel; WhisperModel('small.en', device='cpu', compute_type='int8', download_root='/opt/whisper-models')"
 
 # Build gscam2 from source (Jetson only — ros-humble-gscam2 binary not available for arm64/Jammy)
 RUN mkdir -p /workspaces/gscam2_ws/src && \

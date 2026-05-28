@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>docbot_stt</name>
+  <version>0.1.0</version>
+  <description>
+    Speech-to-text action server for DocBot. Buffers /audio frames during an
+    active goal, runs faster-whisper (CTranslate2) on the captured audio, and
+    returns a transcript. Phase 1 uses a fixed record-for-N-seconds policy;
+    VAD endpointing is planned for a follow-up.
+  </description>
+  <maintainer email="cacton@uw.edu">Colin Acton</maintainer>
+  <license>MIT</license>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>builtin_interfaces</depend>
+  <depend>docbot_interfaces</depend>
+
+  <exec_depend>python3-numpy</exec_depend>
+  <!-- faster-whisper installed via docker/requirements.txt; model baked at /opt/whisper-models/ -->
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

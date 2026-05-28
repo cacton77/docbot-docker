@@ -427,6 +427,7 @@ cd "$SCRIPT_DIR"
 
 # Parse command line arguments
 COMPOSE_PROFILE=""
+USE_SERVICE="${USE_SERVICE:-false}"
 for arg in "$@"; do
     case $arg in
         --profile=*)
@@ -447,6 +448,14 @@ for arg in "$@"; do
             ;;
         --linux)
             COMPOSE_PROFILE="linux"
+            shift
+            ;;
+        --service)
+            USE_SERVICE="true"
+            shift
+            ;;
+        --no-service)
+            USE_SERVICE="false"
             shift
             ;;
         *)
@@ -521,6 +530,12 @@ if [ -f "$SCRIPT_DIR/$ENV_FILE" ]; then
         sed -i "s/^COMPOSE_SERVICE=.*/COMPOSE_SERVICE=$COMPOSE_SERVICE/" "$SCRIPT_DIR/$ENV_FILE"
     else
         echo "COMPOSE_SERVICE=$COMPOSE_SERVICE" >> "$SCRIPT_DIR/$ENV_FILE"
+    fi
+    # Update USE_SERVICE
+    if grep -q "^USE_SERVICE=" "$SCRIPT_DIR/$ENV_FILE"; then
+        sed -i "s/^USE_SERVICE=.*/USE_SERVICE=$USE_SERVICE/" "$SCRIPT_DIR/$ENV_FILE"
+    else
+        echo "USE_SERVICE=$USE_SERVICE" >> "$SCRIPT_DIR/$ENV_FILE"
     fi
     # Copy .env file to apps directory
     echo "Copying .env file to $APPS_DIR..."
@@ -629,14 +644,35 @@ if command -v update-desktop-database &> /dev/null; then
 fi
 
 
-# Set up systemd service for auto-start on boot
-echo ""
-echo "Setting up systemd service for auto-start..."
-SERVICE_NAME="$CONTAINER_NAME"
-SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+# Set kernel socket buffer limit (permanent)
+if ! grep -q "net.core.rmem_max=26214400" /etc/sysctl.conf; then
+    echo "net.core.rmem_max=26214400" | sudo tee -a /etc/sysctl.conf
+fi
+if ! grep -q "net.core.wmem_max=26214400" /etc/sysctl.conf; then
+    echo "net.core.wmem_max=26214400" | sudo tee -a /etc/sysctl.conf
+fi
+# Bump IP fragment reassembly cache (default 4MB/3MB) — required when
+# subscribing to large image topics (compressedDepth, raw frames) from
+# another host: each message fragments into ~50-100 IP packets and the
+# default cache overflows in milliseconds, causing ~100% reassembly
+# failure (see `netstat -s | grep reassembl`).
+if ! grep -q "net.ipv4.ipfrag_high_thresh=134217728" /etc/sysctl.conf; then
+    echo "net.ipv4.ipfrag_high_thresh=134217728" | sudo tee -a /etc/sysctl.conf
+fi
+if ! grep -q "net.ipv4.ipfrag_low_thresh=100663296" /etc/sysctl.conf; then
+    echo "net.ipv4.ipfrag_low_thresh=100663296" | sudo tee -a /etc/sysctl.conf
+fi
+sudo sysctl -p
 
-# Create the systemd service file
-sudo tee "$SERVICE_FILE" > /dev/null << EOF
+# Set up systemd service for auto-start on boot (gated by USE_SERVICE)
+if [ "$USE_SERVICE" = "true" ]; then
+    echo ""
+    echo "Setting up systemd service for auto-start..."
+    SERVICE_NAME="$CONTAINER_NAME"
+    SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+
+    # Create the systemd service file
+    sudo tee "$SERVICE_FILE" > /dev/null << EOF
 [Unit]
 Description=$CONTAINER_NAME - ROS2 Docker Container
 After=docker.service network-online.target
@@ -655,37 +691,35 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
 
-# Set kernel socket buffer limit (permanent)
-if ! grep -q "net.core.rmem_max=26214400" /etc/sysctl.conf; then
-    echo "net.core.rmem_max=26214400" | sudo tee -a /etc/sysctl.conf
-fi
-if ! grep -q "net.core.wmem_max=26214400" /etc/sysctl.conf; then
-    echo "net.core.wmem_max=26214400" | sudo tee -a /etc/sysctl.conf
-fi
-sudo sysctl -p
+    # Reload systemd daemon and enable the service
+    sudo systemctl daemon-reload
+    sudo systemctl enable "$SERVICE_NAME.service"
+    echo "✓ Systemd service '$SERVICE_NAME' created and enabled"
 
-# Set kernel socket buffer limit (permanent)
-if ! grep -q "net.core.rmem_max=26214400" /etc/sysctl.conf; then
-    echo "net.core.rmem_max=26214400" | sudo tee -a /etc/sysctl.conf
+    # Restart the service to apply changes
+    echo "Restarting service to apply changes..."
+    sudo systemctl restart "$SERVICE_NAME.service"
+    echo "✓ Service restarted"
+    echo ""
+    echo "  To check status: sudo systemctl status $SERVICE_NAME"
+    echo "  To view logs: sudo journalctl -u $SERVICE_NAME -f"
+    echo "  To disable auto-start: sudo systemctl disable $SERVICE_NAME"
+else
+    # USE_SERVICE=false: tear down any service this installer previously created
+    # so a prior --service run doesn't keep auto-starting the container.
+    SERVICE_NAME="$CONTAINER_NAME"
+    SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+    if [ -f "$SERVICE_FILE" ]; then
+        echo ""
+        echo "USE_SERVICE=false — removing existing systemd service '$SERVICE_NAME'..."
+        sudo systemctl stop "$SERVICE_NAME.service" 2>/dev/null || true
+        sudo systemctl disable "$SERVICE_NAME.service" 2>/dev/null || true
+        sudo rm -f "$SERVICE_FILE"
+        sudo systemctl daemon-reload
+        sudo systemctl reset-failed "$SERVICE_NAME.service" 2>/dev/null || true
+        echo "✓ Systemd service '$SERVICE_NAME' stopped, disabled, and removed"
+    fi
 fi
-if ! grep -q "net.core.wmem_max=26214400" /etc/sysctl.conf; then
-    echo "net.core.wmem_max=26214400" | sudo tee -a /etc/sysctl.conf
-fi
-sudo sysctl -p
-
-# Reload systemd daemon and enable the service
-sudo systemctl daemon-reload
-sudo systemctl enable "$SERVICE_NAME.service"
-echo "✓ Systemd service '$SERVICE_NAME' created and enabled"
-
-# Restart the service to apply changes
-echo "Restarting service to apply changes..."
-sudo systemctl restart "$SERVICE_NAME.service"
-echo "✓ Service restarted"
-echo ""
-echo "  To check status: sudo systemctl status $SERVICE_NAME"
-echo "  To view logs: sudo journalctl -u $SERVICE_NAME -f"
-echo "  To disable auto-start: sudo systemctl disable $SERVICE_NAME"
 
 echo ""
 echo "========================================="
@@ -694,7 +728,10 @@ echo "========================================="
 echo ""
 echo "Container name: $CONTAINER_NAME"
 echo "Platform profile: $COMPOSE_PROFILE"
+echo "Systemd service: $USE_SERVICE"
 echo ""
 echo "You can now launch the container by running: ./connect.sh"
-echo "The container will also auto-start on boot via systemd."
+if [ "$USE_SERVICE" = "true" ]; then
+    echo "The container will also auto-start on boot via systemd."
+fi
 echo ""

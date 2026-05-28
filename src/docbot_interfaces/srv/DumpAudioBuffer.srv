@@ -1,0 +1,13 @@
+# Request a copy of the rolling forensic audio buffer as a WAV file.
+# If end_time.sec == 0 and end_time.nanosec == 0, defaults to now.
+# If the requested window exceeds the buffer's retention, returns what is
+# available and notes the clipping in `message`.
+
+builtin_interfaces/Time end_time
+builtin_interfaces/Duration window
+string tag                          # filename hint, e.g. "escalation_2026..."
+---
+bool success
+string file_path                    # absolute path inside /data
+uint32 num_samples
+string message                      # human-readable detail or warning

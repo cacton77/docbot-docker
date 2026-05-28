@@ -1,0 +1,14 @@
+# Instruct the escalation node to act on an escalation decision.
+# Caller is the orchestrator; service may optionally dump the audio buffer
+# and emit notifications depending on level and configuration.
+
+string log_entry_id
+string conversation_id
+string level                        # "monitor" | "advisory" | "urgent" | "emergency"
+string reasoning
+string recommended_action
+bool   retain_audio                 # true → dump forensic buffer to /data
+---
+bool success
+string audio_clip_path              # populated if retain_audio was true
+string notify_result                # e.g. "sms_sent" | "noop_dry_run"

@@ -1,0 +1,25 @@
+# Start a streaming transcription session. The goal includes how much
+# pre-trigger audio to prepend (so the first word isn't clipped) and
+# endpointing parameters. Feedback streams partial transcripts; the result
+# contains the final transcript plus a reference to the saved audio clip.
+
+# Goal
+uint32 preroll_ms
+builtin_interfaces/Duration max_duration
+builtin_interfaces/Duration silence_timeout    # endpoint after this much silence
+string language                                # "" = auto
+
+---
+# Result
+bool success
+string transcript                              # final, possibly punctuated
+float32 confidence                             # avg/word-level, model-dependent
+builtin_interfaces/Duration duration
+string audio_clip_path                         # saved utterance, for replay/debug
+string error_message
+
+---
+# Feedback
+string partial_transcript                      # streamed as STT produces segments
+float32 rms_level                              # cheap "VU meter" for UI
+bool   speech_active                           # current VAD state

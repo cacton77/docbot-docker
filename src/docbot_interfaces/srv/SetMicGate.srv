@@ -1,0 +1,6 @@
+# Used by the orchestrator to suppress wake detection while TTS is playing,
+# preventing the system from hearing its own voice and re-triggering.
+
+bool gated                          # true = trigger node ignores audio
+---
+bool success

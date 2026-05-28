@@ -20,6 +20,19 @@ log/
 # ── Local tooling config ──────────────────────────────────────────────────────
 .claude/settings.local.json
 
+# ── VS Code per-machine caches ────────────────────────────────────────────────
+# IntelliSense database; routinely grows to hundreds of MB and blocks pushes.
+# c_cpp_properties.json / settings.json stay tracked as shared dev config.
+.vscode/*.db
+.vscode/*.db-shm
+.vscode/*.db-wal
+
+# ── Runtime audio output ──────────────────────────────────────────────────────
+# Forensic-buffer dumps from docbot_audio and captured utterances from
+# docbot_stt — generated at runtime, not source.
+data/audio_dumps/
+data/utterances/
+
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.pyc

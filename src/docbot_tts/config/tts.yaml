@@ -1,0 +1,39 @@
+/**:
+  ros__parameters:
+    use_sim_time: false
+
+tts:
+  ros__parameters:
+    # Piper voice baked into the image at /opt/piper-voices/ (see
+    # docker/Dockerfile). NOT under /models because that directory is
+    # bind-mounted from the host and would shadow image-time downloads.
+    model_path: "/opt/piper-voices/en_US-lessac-medium.onnx"
+    config_path: "/opt/piper-voices/en_US-lessac-medium.onnx.json"
+
+    # PortAudio output device. "default" uses the system default output.
+    # Substring match ("Scarlett") or "N" for an integer index also works.
+    # The node opens the stream at the device's native rate and resamples
+    # from Piper's 22050 Hz output, just like docbot_audio does on capture.
+    #
+    # Run this inside the container to list output devices and pick one:
+    #   python3 -c "import sounddevice as sd; print(sd.query_devices(kind='output')); print('---'); print(sd.query_devices())"
+    # The `<` marker is the system default output — usually wrong for a
+    # workstation with an audio interface where headphones plug into the
+    # interface (Scarlett, etc.), not the HDMI/onboard output.
+    playback_device: "default"
+
+    # Output channel count. Most consumer outputs (HDMI, USB headsets, audio
+    # interfaces) need stereo even for a mono source — mono opens are picky
+    # and some devices play nothing. The node duplicates Piper's mono into
+    # both channels when this is 2.
+    output_channels: 2
+
+    # Mic gating during playback — keeps the wake-word node from triggering
+    # on the system's own voice. Best-effort: if the service is unavailable
+    # (e.g. trigger node not running yet) playback proceeds without gating.
+    set_gate_service: "/wake_word/set_gate"
+    pre_play_gate_ms: 100         # delay between gate(true) and audio start
+    post_play_gate_ms: 400        # ungate delay after audio ends (speaker tail)
+
+    default_length_scale: 1.0     # used when goal.rate <= 0
+    progress_chunk_ms: 100        # how often to publish action feedback

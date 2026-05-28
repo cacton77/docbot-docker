@@ -8,7 +8,15 @@ x-common-env: &common-env
   XAUTHORITY: /tmp/.docker.xauth
   XDG_RUNTIME_DIR: /tmp/runtime-${USERNAME:-macs}
   ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
-  CYCLONEDDS_URI: ${CYCLONEDDS_URI:-/config/cyclonedds.xml}
+  RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
+  CYCLONEDDS_URI: ${CYCLONEDDS_URI:-file:///config/cyclonedds.xml}
+  # FastDDS reads the legacy var on Humble, the new one on Jazzy. Set both.
+  FASTRTPS_DEFAULT_PROFILES_FILE: ${FASTRTPS_DEFAULT_PROFILES_FILE:-/config/fastdds.xml}
+  FASTDDS_DEFAULT_PROFILES_FILE: ${FASTDDS_DEFAULT_PROFILES_FILE:-/config/fastdds.xml}
+  # Pulse client connects here; the socket is bind-mounted from the host in
+  # x-common-volumes. UID matches the container user via the UID build arg,
+  # so pulse's same-UID auth accepts the connection without a cookie.
+  PULSE_SERVER: unix:/run/user/${UID:-1000}/pulse/native
 
 x-nvidia-env: &nvidia-env
   <<: *common-env
@@ -35,6 +43,9 @@ x-common-volumes: &common-volumes
   - ./config:/config:rw
   - /dev:/dev
   - /tmp/runtime-${USERNAME:-macs}:/tmp/runtime-${USERNAME:-macs}:rw
+  # Host PulseAudio/PipeWire socket — see PULSE_SERVER in x-common-env. Same
+  # path inside and outside the container so PULSE_SERVER works as-is.
+  - /run/user/${UID:-1000}/pulse:/run/user/${UID:-1000}/pulse:rw
 
 x-jetson-volumes: &jetson-volumes
   - /tmp/.X11-unix:/tmp/.X11-unix:rw
@@ -46,6 +57,7 @@ x-jetson-volumes: &jetson-volumes
   - ./config:/config:rw
   - /dev:/dev
   - /tmp/runtime-${USERNAME:-macs}:/tmp/runtime-${USERNAME:-macs}:rw
+  - /run/user/${UID:-1000}/pulse:/run/user/${UID:-1000}/pulse:rw
   - /tmp/argus_socket:/tmp/argus_socket
   - /proc/device-tree/compatible:/proc/device-tree/compatible:ro
   - /proc/device-tree/chosen:/proc/device-tree/chosen:ro

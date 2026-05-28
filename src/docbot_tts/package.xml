@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>docbot_tts</name>
+  <version>0.1.0</version>
+  <description>
+    Text-to-speech (Piper) action server for DocBot. Synthesizes a response,
+    plays it back via PortAudio, and gates the wake-word trigger node during
+    playback so the system does not hear its own voice.
+  </description>
+  <maintainer email="cacton@uw.edu">Colin Acton</maintainer>
+  <license>MIT</license>
+
+  <depend>rclpy</depend>
+  <depend>builtin_interfaces</depend>
+  <depend>docbot_interfaces</depend>
+
+  <exec_depend>python3-numpy</exec_depend>
+  <!-- sounddevice / PortAudio / scipy / piper-tts come from docker/requirements.txt -->
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

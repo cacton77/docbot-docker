@@ -1,0 +1,36 @@
+/**:
+  ros__parameters:
+    use_sim_time: false
+
+stt:
+  ros__parameters:
+    # Whisper model name as known to faster-whisper (e.g. "small.en",
+    # "base.en", "medium.en") OR an absolute path to a CT2-converted model
+    # directory. The small.en weights are baked into the image at build
+    # time; other sizes will auto-download to model_root on first use.
+    model_size: "small.en"
+    model_root: "/opt/whisper-models"
+
+    # Compute device resolution. "auto" tries CUDA first, then falls back to
+    # CPU. "cuda" / "cpu" force a single device. compute_type pairs:
+    #   CUDA:  int8_float16   (Orin GPU sweet spot)
+    #   CPU:   int8
+    device: "auto"
+    cuda_compute_type: "int8_float16"
+    cpu_compute_type: "int8"
+
+    # Transcription parameters
+    language: "en"
+    beam_size: 1                  # greedy → lowest latency
+    initial_prompt: ""            # optional prompt to bias decoding
+
+    # Phase 1: record for a fixed duration each goal. The action goal's
+    # max_duration overrides this; pass 0 to fall back to this default.
+    # VAD endpointing arrives in Phase 2.
+    default_record_seconds: 5.0
+    preroll_buffer_seconds: 3.0   # rolling /audio buffer for goal.preroll_ms
+    feedback_interval_ms: 200     # cadence for rms_level feedback
+
+    # Where to write per-utterance WAV clips referenced by result.audio_clip_path.
+    audio_clip_directory: "/data/utterances"
+    save_audio_clips: true

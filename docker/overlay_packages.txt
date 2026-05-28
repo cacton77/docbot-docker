@@ -13,3 +13,18 @@ ros-humble-image-transport-plugins
 ros-humble-rqt*
 ros-humble-ros2-control
 ros-humble-ros2-controllers
+
+# ── Audio (docbot_audio + docbot_tts) ─────────────────────────────────────────
+# libportaudio2:       runtime backend for the `sounddevice` Python package.
+# alsa-utils:          provides `arecord -l` for mic enumeration / verification.
+# sox:                 provides `soxi` for inspecting forensic-dump WAV files.
+# libasound2-plugins:  provides the ALSA "pulse" PCM plugin so /etc/asound.conf
+#                      can route default → host PulseAudio/PipeWire.
+# libpulse0:           PulseAudio client library used by the plugin above.
+# pulseaudio-utils:    pactl/pacmd for diagnosing the pulse bridge in-container.
+libportaudio2
+alsa-utils
+sox
+libasound2-plugins
+libpulse0
+pulseaudio-utils

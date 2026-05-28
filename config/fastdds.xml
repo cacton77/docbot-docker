@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  FastDDS profile tuned for high-bandwidth image topics (compressedDepth,
+  raw camera frames) across hosts. Default builtin UDPv4 uses ~200KB socket
+  buffers, which causes UDP fragment drops when subscribing to image
+  topics from another machine on the ROS graph. Bump send/receive to 10MB
+  and rely on the kernel rmem_max/wmem_max set by install.sh (26MB) to
+  back it.
+
+  Both hosts on the ROS graph need this profile (and the kernel limits)
+  for the fix to apply end-to-end.
+-->
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+
+    <transport_descriptors>
+        <transport_descriptor>
+            <transport_id>udpv4_tuned</transport_id>
+            <type>UDPv4</type>
+            <sendBufferSize>10485760</sendBufferSize>
+            <receiveBufferSize>10485760</receiveBufferSize>
+        </transport_descriptor>
+    </transport_descriptors>
+
+    <participant profile_name="participant_default" is_default_profile="true">
+        <rtps>
+            <userTransports>
+                <transport_id>udpv4_tuned</transport_id>
+            </userTransports>
+            <useBuiltinTransports>false</useBuiltinTransports>
+        </rtps>
+    </participant>
+
+</profiles>

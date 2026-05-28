@@ -1,0 +1,20 @@
+/**:
+  ros__parameters:
+    use_sim_time: false
+
+audio_capture:
+  ros__parameters:
+    # PortAudio device. "default" uses the system default input.
+    # To list available devices, run:
+    #   python3 -c "import sounddevice as sd; print(sd.query_devices())"
+    # Either a digit-string (interpreted as index) or a substring of the
+    # device name works.
+    device: "default"
+
+    sample_rate: 16000          # Hz; do not change without updating downstream
+    channels: 1                 # mono
+    sample_format: "S16_LE"     # only format currently supported
+    frame_ms: 30                # → 480 samples/frame at 16 kHz
+
+    forensic_seconds: 60.0      # rolling buffer for DumpAudioBuffer
+    dump_directory: "/data/audio_dumps"

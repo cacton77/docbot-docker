@@ -1,0 +1,26 @@
+# Single-turn query to the LLM backend (Ollama / llama.cpp / vLLM / cloud).
+# The orchestrator never imports an LLM SDK directly; everything flows
+# through this service.
+
+string user_text                    # latest user utterance
+string[] context_summaries          # rolling memory of older turns
+string conversation_id              # UUID for the dialog session
+string system_prompt_override       # optional; blank = use config default
+---
+bool success
+string response_text                # what to speak back to the user
+string log_summary                  # one-line summary for the log
+string[] reported_symptoms          # extracted symptom strings
+string[] observations               # model-noted observations
+
+# Escalation taxonomy mirrors the system prompt:
+# "none" | "monitor" | "advisory" | "urgent" | "emergency"
+string escalation_level
+string escalation_reasoning
+string escalation_action
+
+# Self-reported confidence: "low" | "medium" | "high"
+string confidence_self_assessment
+
+string raw_tool_input_json          # full structured output for audit
+string error_message

@@ -15,3 +15,22 @@ facenet-pytorch
 # onnxruntime-gpu afterwards to enable CUDAExecutionProvider on Jetson.
 insightface
 onnxruntime
+
+# docbot_audio — mic capture
+# sounddevice binds PortAudio (libportaudio2 from overlay_packages.txt).
+# numpy is a transitive dep of scipy/ultralytics/mediapipe but pinned here so
+# the audio node's import works even if those upstream deps drop it.
+sounddevice
+numpy
+
+# docbot_tts — Piper TTS
+# Streams int16 PCM from ONNX-backed voices; runs on CPU at >10× real-time
+# on Orin Nano. The voice model files are baked into the image at
+# /opt/piper-voices/ by the Dockerfile (not /models, which is bind-mounted).
+piper-tts
+
+# docbot_stt — Speech-to-text (faster-whisper, CTranslate2 backend)
+# PyPI wheel bundles CTranslate2 + CUDA runtime (x86_64). Falls back to CPU
+# automatically when CUDA isn't available. small.en CT2 weights are baked
+# into /opt/whisper-models/ by the Dockerfile.
+faster-whisper>=1.0,<2
